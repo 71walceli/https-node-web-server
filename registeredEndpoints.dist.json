@@ -1,0 +1,21 @@
+
+[
+    {
+        "localEndpoint": "http://example.internal/",
+        "globalEndpoint": "/",
+        "publicDomain": "example.globaly",
+        "cors": true,
+        "cert": "/Config/SSL/fullchain1.pem",
+        "key": "/Config/SSL/privkey1.pem",
+        "proxyOptions": {
+            "tryPreventRedirectionLoops": false,
+            "ws": true
+        },
+        "headersRewrite": {
+            "x-server": "express"
+        },
+        "keepAliveOptions": {
+            "timeout": 60000
+        }
+    }
+]

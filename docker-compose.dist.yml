@@ -1,0 +1,22 @@
+
+version: "3"
+services:
+  nodejs-https-proxy:
+    container_name: nodejs-https-proxy
+    entrypoint: yarn start
+    hostname: nodejs-https-proxy
+    image: node:18
+    networks:
+      - internal-network
+    ports:
+      - 443:443/tcp
+    restart: unless-stopped
+    volumes:
+      - .:/App
+      - ./sslCerts
+    working_dir: /App
+networks:
+  # Recommended to be external as docker-compuse wuld create given network prepended folder name
+  #  of where running script is.
+  internal-network: 
+    external: true
