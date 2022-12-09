@@ -1,12 +1,27 @@
 
 [
     {
-        "localEndpoint": "http://example.internal/",
-        "globalEndpoint": "/",
-        "publicDomain": "example.globaly",
-        "cors": true,
-        "cert": "/Config/SSL/fullchain1.pem",
-        "key": "/Config/SSL/privkey1.pem",
+        "publicDomain": "global.example.com",
+        "urls": {
+            "/service1": {
+                "destination": "http://service1.example.internal/",
+                "cors": true,
+                "proxyOptions": {
+                    "tryPreventRedirectionLoops": false,
+                    "ws": true
+                },
+                "headersRewrite": {
+                    "x-server": "express"
+                },
+                "keepAliveOptions": {
+                    "timeout": 60000
+                }
+            },
+            "/service2": {
+                "destination": "http://service2.example.internal/",
+                "cors": true
+            }
+        },
         "proxyOptions": {
             "tryPreventRedirectionLoops": false,
             "ws": true
@@ -16,6 +31,9 @@
         },
         "keepAliveOptions": {
             "timeout": 60000
-        }
+        },
+        "cors": true,
+        "cert": "/Config/SSL/test.71walceli.beauty/fullchain1.pem",
+        "key": "/Config/SSL/test.71walceli.beauty/privkey1.pem"
     }
 ]
