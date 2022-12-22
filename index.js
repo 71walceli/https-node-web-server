@@ -13,8 +13,74 @@ vhttpsServer.setOptions({
     key: fs.readFileSync(process.env.DEFAULT_SSL_KEY),
 });
 
+// TODO Export into othr module
+const proxyHandlers = {
+    handleRequest: (proxyReq, req, res) => {
+        // TODO Add logging
+        //  - Local and destination IPs
+        //  - Public and proxied endpoints
+        //  - HTTP status code
+        //  - Headers
+        //  - Other connection errors
+        console.log({
+            event: "onProxyReq",
+            timestamp: new Date().toLocaleString(),
+            request: {
+                // TODO Reveal only req.boby first bytes
+                //data: inspect(req.body),
+                method: req.method,
+                host: req.hostname,
+                url: req.path,
+                source: `${req.connection.remoteAddress}:${req.connection.remotePort}`,
+            },
+        })
+    },
+    handleResponse: (proxyRes, req, res) => {
+        console.log({
+            event: "onProxyRes",
+            timestamp: new Date().toLocaleString(),
+            request: {
+                // TODO Print location redirects
+                // TODO Print content type
+                //data: inspect(res.body),
+                method: req.method,
+                url: req.url,
+                source: `${req.connection.remoteAddress}:${req.connection.remotePort}`,
+            },
+            response: {
+                //data: inspect(res.body),
+                status: res.statusCode,
+            },
+        })
+    },
+    handleError: (error, req, res, target) => {
+        console.log({
+            event: "onError",
+            timestamp: new Date().toLocaleString(),
+            request: {
+                // TODO Print location redirects
+                // TODO Print content type
+                //data: inspect(res.body),
+                method: req.method,
+                url: req.url,
+                source: `${req.connection.remoteAddress}:${req.connection.remotePort}`,
+            },
+            error: {
+                message: error.message,
+                stactTrace: error.stack.split(/\n\s+at /).slice(1),
+            },
+        })
+        res?.status(500)?.json({ message: "Server error" })
+    },
+    pathRewriteFactory: url => ( 
+        (path) => url && `${path.replace(url.replace("*", ""), "").replace(/\/{2,}/ig, "/")}`
+            || url === "/" && path
+            || path 
+    ),
+}
+
 const registerProxiedService = (endpoint) => {
-    const expressServer = express()
+    const expressServer = express.Router()
 
     if (endpoint.urls) {
         for (let url in endpoint.urls) {
@@ -23,15 +89,13 @@ const registerProxiedService = (endpoint) => {
             const proxyOptions = {
                 changeOrigin: true,
                 logLevel: "debug",
-                pathRewrite: (path) => 
-                    url && `${path.replace(url
-                        .replace("*", ""), "")
-                        .replace(/\/{2,}/ig, "/")}`
-                    || url === "/" && path
-                    || path,
                 // TODO Review timeout
                 //proxyTimeout: 5000,
                 target: urlConfig.destination,
+                pathRewrite: proxyHandlers.pathRewriteFactory(url),
+                onError: proxyHandlers.handleError,
+                onProxyReq: proxyHandlers.handleRequest,
+                onProxyRes: proxyHandlers.handleResponse,
                 ...urlConfig.proxyOptions
             };
             const middleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
@@ -41,21 +105,6 @@ const registerProxiedService = (endpoint) => {
                 router.use(cors())
             }
             router.use(middleware)
-            // TODO call next
-            // TODO Add logging
-            //  - Local and destination IPs
-            //  - Local and destination endpoints
-            //  - Timestamp
-            //  - HTTP status code
-            //  - Headers
-            //  - Other connection errors
-            if (urlConfig.rewriteHeaders) {
-                middleware.onProxyReq((proxyReq, res, req) => {
-                    for (const header in urlConfig.headersRewrite) {
-                        proxyReq.headers[header] = urlConfig.headersRewrite[header]
-                    }
-                })
-            }
             if (urlConfig.keepAliveOptions?.timeout) {
                 router.keepAliveTimeout = urlConfig.keepAliveOptions.timeout;
                 router.headersTimeout = urlConfig.keepAliveOptions.timeout;
@@ -69,14 +118,11 @@ const registerProxiedService = (endpoint) => {
         const proxyOptions = {
             changeOrigin: true,
             logLevel: "debug",
-            /*
-            pathRewrite: (path) => endpoint.globalEndpoint && `${path.replace(endpoint.globalEndpoint.replace("*", ""), "")
-                .replace(/\/{2,}/ig, "/")}`
-                || endpoint.globalEndpoint === "/" && path
-                || path,
-            proxyTimeout: 5000,
-            */
             target: endpoint.destination,
+            pathRewrite: proxyHandlers.pathRewriteFactory("/"),
+            onError: proxyHandlers.handleError,
+            onProxyReq: proxyHandlers.handleRequest,
+            onProxyRes: proxyHandlers.handleResponse,
             ...endpoint.proxyOptions
         };
         const middleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
@@ -122,6 +168,7 @@ if (process.env.REGISTERED_SERVICES_SPEC
 
 vhttpsServer.use((req, res) => {
     console.log(`${req.headers.host} not registered`)
+    proxyHandlers.handleRequest(null, req, res)
     res.statusCode = 404
     res.end('Not Found!');
 });
