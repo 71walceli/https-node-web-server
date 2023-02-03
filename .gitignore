@@ -1,11 +1,13 @@
 
-node_modules
-letsencrypt
-*.bak
-*.zip
-*.pem
+# Main ignores
 registeredEndpoints.json
 docker-compose.yml
+letsencrypt*
+*.bak*
+
+node_modules
+*.zip
+*.pem
 
 # Logs
 logs
