@@ -29,8 +29,8 @@ const proxyHandlers = {
                 // TODO Reveal only req.boby first bytes
                 //data: inspect(req.body),
                 method: req.method,
-                host: req.hostname,
-                url: req.path,
+                host: req.headers.Host,
+                url: req.url,
                 source: `${req.connection.remoteAddress}:${req.connection.remotePort}`,
             },
         })
@@ -70,7 +70,7 @@ const proxyHandlers = {
                 stactTrace: error.stack.split(/\n\s+at /).slice(1),
             },
         })
-        res?.status(500)?.json({ message: "Server error" })
+        res?.status?.(500)?.json({ message: "Server error" })
     },
     pathRewriteFactory: url => ( 
         (path) => url && `${path.replace(url.replace("*", ""), "").replace(/\/{2,}/ig, "/")}`
@@ -112,7 +112,6 @@ const registerProxiedService = (endpoint) => {
                 middleware.headersTimeout = urlConfig.keepAliveOptions.timeout;
             }
             expressServer.use(url, router)
-            //expressServer.use((req, res) => res.status(404).end("Not Found"))
         }
     } else {
         const proxyOptions = {
@@ -142,13 +141,14 @@ const registerProxiedService = (endpoint) => {
             middleware.headersTimeout = endpoint.keepAliveOptions.timeout;
         }
     }
+    expressServer.use((req, res) => res.status(404).end("Not Found"))
     vhttpsServer.use(endpoint.publicDomain
         ,{
             cert: fs.readFileSync(endpoint.cert ||
-                `/Config/SSL/${endpoint.publicDomain}/fullchain1.pem`
+                `/Config/SSL/${endpoint.publicDomain}/fullchain.pem`
             ),
             key: fs.readFileSync(endpoint.key ||
-                `/Config/SSL/${endpoint.publicDomain}/privkey1.pem`
+                `/Config/SSL/${endpoint.publicDomain}/privkey.pem`
             ),
         }
         ,expressServer
