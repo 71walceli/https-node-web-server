@@ -79,83 +79,100 @@ const proxyHandlers = {
     ),
 }
 
-const registerProxiedService = (endpoint) => {
-    const expressServer = express.Router()
+const handleNotFound = (req, res) => {
+    console.log({ status: 404, url: req?.url });
+    res.statusCode = 404;
+    res.end("Not Found!");
+};
 
-    if (endpoint.urls) {
-        for (let url in endpoint.urls) {
-            const router = express.Router()
-            const urlConfig = endpoint.urls[url]
+const registerProxiedService = (endpoint) => {
+    const expressServer = express.Router();
+  
+    const createMiddleware = ({ endpointConfig, url }) => {
+        
+        const createProxyOptions = (endpointConfig, url) => {
             const proxyOptions = {
                 changeOrigin: true,
                 logLevel: "debug",
-                // TODO Review timeout
-                //proxyTimeout: 5000,
-                target: urlConfig.destination,
-                pathRewrite: proxyHandlers.pathRewriteFactory(url),
+                target: endpointConfig.destination,
                 onError: proxyHandlers.handleError,
                 onProxyReq: proxyHandlers.handleRequest,
                 onProxyRes: proxyHandlers.handleResponse,
-                ...urlConfig.proxyOptions
+                ...endpointConfig.proxyOptions,
             };
-            const middleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
-            
-            // TODO Set this if no global config given
-            if (urlConfig.cors) {
-                router.use(cors())
+            if (url) {
+                proxyOptions.pathRewrite = proxyHandlers.pathRewriteFactory(url);
             }
-            router.use(middleware)
-            if (urlConfig.keepAliveOptions?.timeout) {
-                router.keepAliveTimeout = urlConfig.keepAliveOptions.timeout;
-                router.headersTimeout = urlConfig.keepAliveOptions.timeout;
-                middleware.keepAliveTimeout = urlConfig.keepAliveOptions.timeout;
-                middleware.headersTimeout = urlConfig.keepAliveOptions.timeout;
+            return proxyOptions;
+        };
+
+        let middleware;
+        if (endpointConfig.destination.slice(0,4) === "http") {
+            const proxyOptions = createProxyOptions(endpointConfig, url);
+            const proxyMiddleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
+            const router = express.Router();
+            if (endpointConfig.cors) {
+                if (url)
+                    router.use(url, cors());
+                else
+                    router.use(cors());
             }
-            expressServer.use(url, router)
+            if (url) {
+                router.use(url, (req, res, next) => proxyMiddleware(req, res, next));
+                router.use(url, handleNotFound)  ;
+            } else {
+                router.use((req, res, next) => proxyMiddleware(req, res, next));
+                router.use(handleNotFound)  ;
+            }
+            if (proxyOptions.keepAliveOptions?.timeout) {
+                router.keepAliveTimeout = proxyOptions.keepAliveOptions.timeout;
+                router.headersTimeout = proxyOptions.keepAliveOptions.timeout;
+                proxyMiddleware.keepAliveTimeout = proxyOptions.keepAliveOptions.timeout;
+                proxyMiddleware.headersTimeout = proxyOptions.keepAliveOptions.timeout;
+            }
+            if (endpointConfig.rewriteHeaders) {
+                proxyMiddleware.onProxyReq((proxyReq, res, req) => {
+                    for (const header in endpoint.headersRewrite) {
+                        proxyReq.headers[header] = endpoint.headersRewrite[header];
+                    }
+                });
+            }
+            middleware = (req, res, next) => router(req, res, next);
+        }
+        else if (endpointConfig.destination.slice(0,7) === "file://") {
+            middleware = express.static(endpointConfig.destination.slice(7))
+        }
+        else {
+            throw new TypeError("Unrecognized middelware type to create")
+        }
+        return (req, res) => middleware(req, res, _ => handleNotFound(req, res))
+    };
+
+    if (endpoint.urls) {
+        for (let url in endpoint.urls) {
+            const middleware = createMiddleware({ url, endpointConfig: endpoint.urls[url], });
+            expressServer.use(url, middleware);
         }
     } else {
-        const proxyOptions = {
-            changeOrigin: true,
-            logLevel: "debug",
-            target: endpoint.destination,
-            pathRewrite: proxyHandlers.pathRewriteFactory("/"),
-            onError: proxyHandlers.handleError,
-            onProxyReq: proxyHandlers.handleRequest,
-            onProxyRes: proxyHandlers.handleResponse,
-            ...endpoint.proxyOptions
-        };
-        const middleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
-        expressServer.use(middleware)
-        
-        if (endpoint.rewriteHeaders) {
-            middleware.onProxyReq((proxyReq, res, req) => {
-                for (const header in endpoint.headersRewrite) {
-                    proxyReq.headers[header] = endpoint.headersRewrite[header]
-                }
-            })
-        }
-        if (endpoint?.keepAliveOptions?.timeout) {
-            expressServer.keepAliveTimeout = endpoint.keepAliveOptions.timeout;
-            expressServer.headersTimeout = endpoint.keepAliveOptions.timeout;
-            middleware.keepAliveTimeout = endpoint.keepAliveOptions.timeout;
-            middleware.headersTimeout = endpoint.keepAliveOptions.timeout;
-        }
+        const middleware = createMiddleware({ endpointConfig: endpoint, });
+        expressServer.use(middleware);
     }
-    expressServer.use((req, res) => res.status(404).end("Not Found"))
-    vhttpsServer.use(endpoint.publicDomain
-        ,{
-            cert: fs.readFileSync(endpoint.cert ||
-                `/Config/SSL/${endpoint.publicDomain}/fullchain.pem`
+    expressServer.use(handleNotFound);
+    vhttpsServer.use(
+        endpoint.publicDomain,
+        {
+            cert: fs.readFileSync(
+                endpoint.cert || `/Config/SSL/${endpoint.publicDomain}/fullchain.pem`
             ),
-            key: fs.readFileSync(endpoint.key ||
-                `/Config/SSL/${endpoint.publicDomain}/privkey.pem`
+            key: fs.readFileSync(
+                endpoint.key || `/Config/SSL/${endpoint.publicDomain}/privkey.pem`
             ),
-        }
-        ,expressServer
+        },
+        expressServer,
+        handleNotFound,
     );
     // TODO log every request
-
-}
+};
 
 
 if (process.env.REGISTERED_SERVICES_SPEC 
@@ -172,7 +189,6 @@ vhttpsServer.use((req, res) => {
     res.statusCode = 404
     res.end('Not Found!');
 });
-
 vhttpsServer.listen(443);
 
 
