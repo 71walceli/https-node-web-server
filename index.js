@@ -90,6 +90,8 @@ const registerProxiedService = (endpoint) => {
   
     const createMiddleware = ({ endpointConfig, url }) => {
         
+        // The `url` is only used here on order to create the pathRewriteFactory, so it's not needed
+        //  here, Assigning the route for this middleware is done by the caller. 
         const createProxyOptions = (endpointConfig, url) => {
             const proxyOptions = {
                 changeOrigin: true,
@@ -112,10 +114,7 @@ const registerProxiedService = (endpoint) => {
             const proxyMiddleware = httpProxyMiddleware.createProxyMiddleware(proxyOptions);
             const router = express.Router();
             if (endpointConfig.cors) {
-                if (url)
-                    router.use(url, cors());
-                else
-                    router.use(cors());
+                router.use(cors());
             }
             router.use((req, res, next) => proxyMiddleware(req, res, next));
             if (proxyOptions.keepAliveOptions?.timeout) {
