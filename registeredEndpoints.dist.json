@@ -20,6 +20,10 @@
             "/service2": {
                 "destination": "http://service2.example.internal/",
                 "cors": true
+            },
+            "/cdn": {
+                "destination": "file:///",
+                "cors": true
             }
         },
         "proxyOptions": {
