@@ -117,13 +117,7 @@ const registerProxiedService = (endpoint) => {
                 else
                     router.use(cors());
             }
-            if (url) {
-                router.use(url, (req, res, next) => proxyMiddleware(req, res, next));
-                router.use(url, handleNotFound)  ;
-            } else {
-                router.use((req, res, next) => proxyMiddleware(req, res, next));
-                router.use(handleNotFound)  ;
-            }
+            router.use((req, res, next) => proxyMiddleware(req, res, next));
             if (proxyOptions.keepAliveOptions?.timeout) {
                 router.keepAliveTimeout = proxyOptions.keepAliveOptions.timeout;
                 router.headersTimeout = proxyOptions.keepAliveOptions.timeout;
